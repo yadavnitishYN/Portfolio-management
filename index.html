@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nivesh Ledger — Portfolio Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F7F3; --panel:#FFFFFF; --ink:#14211B; --muted:#66756C;
+    --green:#0E5A45; --green-soft:#E3EFE9; --marigold:#E8A13D; --marigold-soft:#FBF0DC;
+    --loss:#BC3F32; --loss-soft:#F8E7E4; --line:#DBE4DC; --mono:'Spline Sans Mono',ui-monospace,Menlo,monospace;
+    --sans:'Instrument Sans',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 20px 80px}
+
+  /* ---------- header / ledger strip ---------- */
+  header{padding:8px 0 20px;border-bottom:3px solid var(--ink)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--green)}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+  .ledger{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-end;margin-top:16px}
+  .ledger .big{font-family:var(--mono);font-size:40px;font-weight:600;line-height:1}
+  .ledger .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+  .ledger .cell .val{font-family:var(--mono);font-size:19px;font-weight:500}
+  .up{color:var(--green)} .down{color:var(--loss)}
+
+  /* ---------- tabs ---------- */
+  nav{display:flex;gap:4px;margin:18px 0 22px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  nav button{font-family:var(--sans);font-size:14px;font-weight:600;background:none;border:none;color:var(--muted);
+    padding:10px 14px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+  nav button.active{color:var(--ink);border-bottom-color:var(--marigold)}
+  nav button:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+  /* ---------- panels ---------- */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:18px}
+  .card h2{font-size:16px;font-weight:700;margin-bottom:4px}
+  .card .sub{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:820px){.grid2{grid-template-columns:1fr}.ledger .big{font-size:30px}}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+     text-align:left;padding:8px 10px;border-bottom:2px solid var(--ink)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  td.num,th.num{text-align:right;font-family:var(--mono)}
+  tr:last-child td{border-bottom:none}
+  .scheme{font-weight:600} .folio{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:999px}
+  .pill.up{background:var(--green-soft)} .pill.down{background:var(--loss-soft)}
+  .pill.type{background:var(--marigold-soft);color:#8A5A13}
+
+  /* ---------- forms ---------- */
+  label{display:block;font-size:12.5px;font-weight:600;margin:12px 0 4px}
+  input[type=text],input[type=password],input[type=number],input[type=date],select{
+    width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font-family:var(--mono);
+    font-size:13.5px;background:#FCFDFC;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--green);outline-offset:1px}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:600;font-size:14px;
+    background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;margin-top:14px}
+  .btn:hover{background:#0B4A39}
+  .btn.secondary{background:var(--panel);color:var(--green);border:1.5px solid var(--green)}
+  .btn.small{padding:5px 10px;font-size:12px;margin-top:0}
+  .btn.danger{background:var(--panel);color:var(--loss);border:1.5px solid var(--loss)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:26px;text-align:center;color:var(--muted);
+    cursor:pointer;transition:border-color .15s}
+  .drop:hover,.drop.over{border-color:var(--marigold);color:var(--ink)}
+  .status{font-family:var(--mono);font-size:12.5px;margin-top:12px;padding:10px 12px;border-radius:7px;display:none;white-space:pre-wrap}
+  .status.info{display:block;background:var(--marigold-soft);color:#7A4E0E}
+  .status.ok{display:block;background:var(--green-soft);color:var(--green)}
+  .status.err{display:block;background:var(--loss-soft);color:var(--loss)}
+  .empty{padding:26px;text-align:center;color:var(--muted);font-size:14px}
+  .chartbox{position:relative;height:280px}
+  .steps li{margin:8px 0 8px 20px;font-size:14px}
+  .kv{font-family:var(--mono);background:var(--green-soft);padding:1px 7px;border-radius:5px;font-size:12.5px}
+  .note{font-size:12.5px;color:var(--muted);margin-top:10px}
+  .rowactions{white-space:nowrap}
+  .snapchip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:4px 6px 0 0}
+  .snapchip button{background:none;border:none;color:var(--loss);cursor:pointer;font-size:13px;line-height:1}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Nitish Yadav · Consolidated Portfolio</div>
+  <h1>Nitish's Investment Portfolio</h1>
+  <div class="ledger">
+    <div class="cell">
+      <div class="lbl">Total portfolio value</div>
+      <div class="big" id="hdrTotal">₹ —</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Invested (cost)</div>
+      <div class="val" id="hdrCost">—</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Overall gain / loss</div>
+      <div class="val" id="hdrGain">—</div>
+    </div>
+  </div>
+</header>
+
+<nav role="tablist">
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="mf">Update Mutual Funds</button>
+  <button data-tab="liquid">Update Liquid Assets</button>
+  <button data-tab="fetch">Fetch MF Statement</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<!-- ================= DASHBOARD ================= -->
+<section id="tab-dashboard">
+
+  <!-- (a) Summary tables -->
+  <div class="card">
+    <h2>Summary — Mutual Funds <span id="asOn" style="font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:400"></span></h2>
+    <div class="sub">Every fund you hold, at its most recently uploaded value</div>
+    <div style="overflow-x:auto"><table id="mfTable">
+      <thead><tr>
+        <th>Scheme / Folio</th><th class="num">Units</th><th class="num">NAV (₹)</th>
+        <th class="num">Cost (₹)</th><th class="num">Market value (₹)</th>
+        <th class="num">Gain vs cost</th><th>Last updated</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="empty" id="mfEmpty">No mutual fund data yet. Upload a consolidated statement in the “Update Mutual Funds” tab.</div>
+  </div>
+
+  <div class="card">
+    <h2>Summary — Liquid Assets</h2>
+    <div class="sub">Fixed deposits, RBI bonds, and other instruments you've added</div>
+    <div style="overflow-x:auto"><table id="laTable">
+      <thead><tr>
+        <th>Type</th><th class="num">Amount invested (₹)</th><th class="num">Maturity amount (₹)</th>
+        <th>Start date</th><th>Maturity date</th><th class="num">Interest rate %</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="empty" id="laEmpty">No liquid assets yet. Add them in the “Update Liquid Assets” tab.</div>
+  </div>
+
+  <!-- (b) Growth bar chart -->
+  <div class="card">
+    <h2>Overall growth of mutual funds</h2>
+    <div class="sub">Each color is one fund; bars are grouped by statement date. Use the slider to move through time — every upload is kept, and the window keeps bars wide enough to read</div>
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600">Show
+        <select id="chartWindow" style="width:auto;padding:6px 8px">
+          <option value="4">4 dates</option>
+          <option value="6" selected>6 dates</option>
+          <option value="12">12 dates</option>
+          <option value="0">All dates</option>
+        </select>
+      </label>
+      <input type="range" id="chartSlider" min="0" max="0" value="0" step="1"
+        style="flex:1;min-width:170px;accent-color:var(--green)" aria-label="Scroll through statement dates">
+      <span id="chartRangeLbl" class="folio"></span>
+    </div>
+    <div class="chartbox" style="height:400px"><canvas id="chartFunds"></canvas></div>
+  </div>
+
+  <!-- (c) Snapshot downloads -->
+  <div class="card">
+    <h2>Statement snapshots</h2>
+    <div class="sub">Every statement you've uploaded, labelled by its generation ("as on") date — download the exact PDF you attached that day, or the extracted data as CSV. Snapshots are kept here for one year from their statement date; older ones drop off this list automatically, but their values remain in the growth chart above</div>
+    <div id="snapDownloads"></div>
+    <div class="empty" id="snapEmpty">No snapshots from the past year.</div>
+  </div>
+
+  <div class="card">
+    <h2>Asset allocation</h2>
+    <div class="sub">Current market value across mutual funds and liquid assets</div>
+    <div class="chartbox"><canvas id="chartAlloc"></canvas></div>
+  </div>
+</section>
+
+<!-- ================= UPDATE MF ================= -->
+<section id="tab-mf" hidden>
+  <div class="card">
+    <h2>Upload consolidated account statement (CAS)</h2>
+    <div class="sub">Upload the password-protected PDF you received from CAMS / KFintech. It is decrypted locally in your browser, then the holdings table is read automatically. Each upload becomes a dated snapshot, and past snapshots build your trend charts.</div>
+    <div class="drop" id="mfDrop" tabindex="0" role="button" aria-label="Upload CAS PDF">
+      <strong>Drop your CAS PDF here</strong> or click to choose a file
+      <div style="font-size:12px;margin-top:4px">.pdf · password-protected files supported</div>
+    </div>
+    <input type="file" id="mfFile" accept="application/pdf" hidden>
+    <label for="mfPass">PDF password</label>
+    <input type="password" id="mfPass" autocomplete="off" placeholder="The password you set while requesting the statement">
+    <button class="btn" id="mfGo" disabled>Read statement & update portfolio</button>
+    <div class="status" id="mfStatus"></div>
+  </div>
+</section>
+
+<!-- ================= LIQUID ASSETS ================= -->
+<section id="tab-liquid" hidden>
+  <div class="card">
+    <h2>Upload FD receipt, RBI bond certificate, or other proof</h2>
+    <div class="sub">Upload a PDF or a screenshot/photo. The document is read and the investment details (type, institution, amount, rate, maturity) are extracted and added to your dashboard. You can review before saving.</div>
+    <div class="drop" id="laDrop" tabindex="0" role="button" aria-label="Upload liquid asset document">
+      <strong>Drop a PDF or image here</strong> or click to choose a file
+      <div style="font-size:12px;margin-top:4px">.pdf · .png · .jpg · .webp</div>
+    </div>
+    <input type="file" id="laFile" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
+    <label for="laPass">PDF password (only if the PDF is protected — leave blank otherwise)</label>
+    <input type="password" id="laPass" autocomplete="off">
+    <button class="btn" id="laGo" disabled>Read document</button>
+    <div class="status" id="laStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Review & save</h2>
+    <div class="sub">Extracted details appear here — correct anything, or fill this in manually to add an asset without a document.</div>
+    <div class="grid2">
+      <div>
+        <label for="laType">Investment type</label>
+        <select id="laType">
+          <option>Fixed Deposit</option><option>RBI Bond</option><option>Recurring Deposit</option>
+          <option>PPF</option><option>NSC</option><option>Savings</option><option>Gold</option><option>Other</option>
+        </select>
+        <label for="laInst">Institution / description</label>
+        <input type="text" id="laInst" placeholder="e.g. SBI FD #38291">
+        <label for="laPrincipal">Principal / invested amount (₹)</label>
+        <input type="number" id="laPrincipal" min="0" step="0.01">
+      </div>
+      <div>
+        <label for="laRate">Interest rate (% p.a., optional)</label>
+        <input type="number" id="laRate" min="0" step="0.01">
+        <label for="laStart">Start / deposit date (optional)</label>
+        <input type="date" id="laStart">
+        <label for="laMaturity">Maturity date (optional)</label>
+        <input type="date" id="laMaturity">
+        <label for="laCurrent">Maturity / current value (₹)</label>
+        <input type="number" id="laCurrent" min="0" step="0.01">
+      </div>
+    </div>
+    <button class="btn" id="laSave">Add to dashboard</button>
+    <div class="status" id="laSaveStatus"></div>
+  </div>
+</section>
+
+<!-- ================= FETCH ================= -->
+<section id="tab-fetch" hidden>
+  <div class="card">
+    <h2>Request a fresh statement from CAMS</h2>
+    <div class="sub">This app runs in a browser sandbox, so it genuinely cannot log in to camsonline.com and press buttons there for you — web pages are blocked from controlling other websites, and CAMS additionally uses human-verification checks. Two real ways to automate it: use <strong>Claude in Chrome</strong> (Anthropic's browser agent, which can fill this form under your supervision), or ask Claude in chat for a small Playwright script you run on your own computer. From inside this app, the fastest path is the one-click checklist below — CAMS emails the statement within minutes.</div>
+    <button class="btn" onclick="window.open('https://www.camsonline.com/Investors/Statements/Consolidated-Account-Statement','_blank')">Open CAMS statement page ↗</button>
+    <ol class="steps" style="margin-top:16px">
+      <li>Statement Type → select <span class="kv">Summary</span></li>
+      <li>Folio Listing → select <span class="kv">Transacted Folios and Folios with Balance</span></li>
+      <li>Email → the email registered against your mutual fund folios</li>
+      <li>Password & Confirm Password → choose any password; remember it, it unlocks the PDF</li>
+      <li>Click <span class="kv">Submit</span> — the PDF arrives in your inbox within a few minutes</li>
+      <li>Come back here → <strong>Update Mutual Funds</strong> tab → upload the PDF with that password</li>
+    </ol>
+</section>
+
+<!-- ================= SETTINGS ================= -->
+<section id="tab-settings" hidden>
+  <div class="card">
+    <h2>Anthropic API key</h2>
+    <div class="sub">Automatic reading of statements and FD/bond documents is powered by the Claude API and needs your own key. Create one at <strong>console.anthropic.com</strong> (add a small credit balance — each statement costs a fraction of a rupee). The key is saved only in this browser's storage on this device; it is never written into the app's code or sent anywhere except api.anthropic.com.</div>
+    <label for="apiKey">API key</label>
+    <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-...">
+    <button class="btn" id="saveKey">Save key</button>
+    <button class="btn danger" id="clearKey" style="margin-left:8px">Remove key</button>
+    <div class="status" id="keyStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Backup & restore</h2>
+    <div class="sub">Your snapshots, liquid assets, and archived statement PDFs live in this browser only — clearing browser data or switching devices loses them. Export a backup file now and then, and import it on any device to restore everything. Your API key is not included in backups.</div>
+    <button class="btn secondary" id="exportData">Export all data ↓</button>
+    <button class="btn secondary" id="importDataBtn" style="margin-left:8px">Import backup…</button>
+    <input type="file" id="importFile" accept="application/json" hidden>
+    <div class="status" id="backupStatus"></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+/* ================= standalone storage (this browser's localStorage) ================= */
+const store = {
+  async get(k){ const v = localStorage.getItem(k); return v==null ? null : {key:k, value:v}; },
+  async set(k,v){ localStorage.setItem(k, v); return {key:k, value:v}; },
+  async delete(k){ localStorage.removeItem(k); return {key:k, deleted:true}; }
+};
+const API_KEY_STORE = "anthropic-api-key";
+const getApiKey = () => localStorage.getItem(API_KEY_STORE) || "";
+
+/* ================= state & storage ================= */
+const KEY_MF = "portfolio-mf-snapshots";
+const KEY_LA = "portfolio-liquid-assets";
+let snapshots = [];   // [{date:"YYYY-MM-DD", holdings:[{folio,scheme,isin,cost,units,nav,market}]}]
+let liquid = [];      // [{id,type,inst,principal,rate,maturity,current}]
+let charts = {};
+
+const fmt = n => (n==null||isNaN(n)) ? "—" : Number(n).toLocaleString("en-IN",{maximumFractionDigits:0});
+const fmt2 = n => (n==null||isNaN(n)) ? "—" : Number(n).toLocaleString("en-IN",{maximumFractionDigits:2});
+const setStatus = (id,cls,msg)=>{const el=document.getElementById(id);el.className="status "+cls;el.textContent=msg;};
+
+const YEAR_MS = 365*24*3600*1000;
+const withinYear = d => (Date.now() - new Date(d+"T00:00:00").getTime()) <= YEAR_MS;
+
+async function loadState(){
+  try{ const r = await store.get(KEY_MF); if(r&&r.value) snapshots = JSON.parse(r.value).snapshots||[]; }catch(e){}
+  try{ const r = await store.get(KEY_LA); if(r&&r.value) liquid = JSON.parse(r.value).assets||[]; }catch(e){}
+  /* retention: archived statement PDFs are kept for one year, then removed; holdings data is kept forever */
+  let pruned=false;
+  for(const s of snapshots){
+    if(s.hasPdf && !withinYear(s.date)){
+      try{ await store.delete("portfolio-mf-pdf:"+s.date); }catch(e){}
+      s.hasPdf=false; pruned=true;
+    }
+  }
+  if(pruned) await saveMF();
+  renderAll();
+}
+async function saveMF(){ try{ await store.set(KEY_MF, JSON.stringify({snapshots})); }catch(e){ console.error(e); alert("Could not save mutual fund data — storage error."); } }
+async function saveLA(){ try{ await store.set(KEY_LA, JSON.stringify({assets:liquid})); }catch(e){ console.error(e); alert("Could not save liquid assets — storage error."); } }
+
+/* ================= tabs ================= */
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x===b));
+  ["dashboard","mf","liquid","fetch","settings"].forEach(t=>document.getElementById("tab-"+t).hidden = t!==b.dataset.tab);
+}));
+
+function copyText(t,btn){ navigator.clipboard.writeText(t).then(()=>{const o=btn.textContent;btn.textContent="Copied ✓";setTimeout(()=>btn.textContent=o,1500);}); }
+
+/* ================= PDF helpers ================= */
+function readFileAsArrayBuffer(f){ return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Could not read the file."));r.readAsArrayBuffer(f);}); }
+function readFileAsBase64(f){ return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=()=>rej(new Error("Could not read the file."));r.readAsDataURL(f);}); }
+
+async function extractPdfText(buf, password){
+  let doc;
+  try{
+    doc = await pdfjsLib.getDocument({data:buf, password: password||undefined}).promise;
+  }catch(err){
+    if(err && err.name === "PasswordException"){
+      throw new Error(password ? "That password didn't unlock this PDF — check it and try again." : "This PDF is password-protected. Enter the password and try again.");
+    }
+    throw new Error("Could not open this PDF: "+(err.message||err));
+  }
+  let text = "";
+  for(let p=1;p<=doc.numPages;p++){
+    const page = await doc.getPage(p);
+    const tc = await page.getTextContent();
+    text += tc.items.map(i=>i.str).join(" ") + "\n";
+  }
+  return text;
+}
+
+/* ================= Claude API (uses your own key from Settings) ================= */
+async function askClaude(content){
+  const key = getApiKey();
+  if(!key) throw new Error("No API key set. Open the Settings tab and paste your Anthropic API key — document reading needs it. Manual entry in the Liquid Assets form works without a key.");
+  const resp = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key": key,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"
+    },
+    body:JSON.stringify({model:"claude-sonnet-4-6", max_tokens:2000, messages:[{role:"user",content}]})
+  });
+  if(resp.status===401) throw new Error("Your API key was rejected (401). Re-check it in Settings — it should start with sk-ant-.");
+  if(resp.status===429) throw new Error("Rate limit hit (429). Wait a minute and try again, or check your credit balance at console.anthropic.com.");
+  if(!resp.ok) throw new Error("The document reader returned an error ("+resp.status+"). Try again in a moment.");
+  const data = await resp.json();
+  const text = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  const clean = text.replace(/```json|```/g,"").trim();
+  const m = clean.match(/[\[{][\s\S]*[\]}]/);
+  if(!m) throw new Error("Could not find structured data in the document.");
+  return JSON.parse(m[0]);
+}
+
+/* ================= MF upload flow ================= */
+let mfSelected=null;
+const mfDrop=document.getElementById("mfDrop"), mfFile=document.getElementById("mfFile"), mfGo=document.getElementById("mfGo");
+mfDrop.addEventListener("click",()=>mfFile.click());
+mfDrop.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" ")mfFile.click();});
+["dragover","dragleave","drop"].forEach(ev=>mfDrop.addEventListener(ev,e=>{e.preventDefault();mfDrop.classList.toggle("over",ev==="dragover");if(ev==="drop"&&e.dataTransfer.files[0]){mfFile.files=e.dataTransfer.files;mfFileChosen();}}));
+mfFile.addEventListener("change",mfFileChosen);
+function mfFileChosen(){ mfSelected=mfFile.files[0]||null; if(mfSelected){mfDrop.innerHTML="<strong>"+mfSelected.name+"</strong><div style='font-size:12px;margin-top:4px'>Ready — enter the password and click below</div>";mfGo.disabled=false;} }
+
+mfGo.addEventListener("click", async ()=>{
+  if(!mfSelected) return;
+  const pass = document.getElementById("mfPass").value;
+  mfGo.disabled=true;
+  try{
+    setStatus("mfStatus","info","Unlocking and reading the PDF…");
+    const buf = await readFileAsArrayBuffer(mfSelected);
+    const text = await extractPdfText(buf, pass);
+    setStatus("mfStatus","info","PDF unlocked ✓  Extracting holdings…");
+    const prompt = "Below is raw text from an Indian CAMS/KFintech Consolidated Account Summary. The columns are Folio No, ISIN, Scheme Name, Cost Value, Unit Balance, NAV Date, NAV, Market Value, Registrar, but the text stream may be jumbled. Sanity-check each row: units × NAV should approximately equal market value — use that to assign numbers to the right fields. Respond with ONLY compact JSON, no markdown, no preamble, exactly this shape: {\"statement_date\":\"YYYY-MM-DD\",\"holdings\":[{\"folio\":\"\",\"isin\":\"\",\"scheme\":\"short scheme name\",\"cost\":0,\"units\":0,\"nav\":0,\"market\":0}]}. statement_date is the 'As on' date. Shorten scheme names (drop 'Direct Plan - Growth (Non-Demat)' etc, keep fund house + fund name + Direct/Regular).\n\n---\n"+text.slice(0,14000);
+    const parsed = await askClaude(prompt);
+    if(!parsed.holdings || !parsed.holdings.length) throw new Error("No holdings were found in this statement.");
+    const date = parsed.statement_date || new Date().toISOString().slice(0,10);
+    const holdings = parsed.holdings.map(h=>({folio:String(h.folio||""),isin:String(h.isin||""),scheme:String(h.scheme||"Unknown scheme"),
+      cost:+h.cost||0,units:+h.units||0,nav:+h.nav||0,market:+h.market||0}));
+    const idx = snapshots.findIndex(s=>s.date===date);
+    let pdfSaved = false;
+    try{
+      const b64 = await readFileAsBase64(mfSelected);
+      if(b64.length < 4500000){ await store.set("portfolio-mf-pdf:"+date, b64); pdfSaved = true; }
+    }catch(e){ console.warn("PDF archival skipped:", e); }
+    const snap = {date, holdings, hasPdf: pdfSaved || (idx>=0 && snapshots[idx].hasPdf)};
+    if(idx>=0) snapshots[idx]=snap; else snapshots.push(snap);
+    snapshots.sort((a,b)=>a.date.localeCompare(b.date));
+    await saveMF();
+    chartStart = null;   // snap growth chart to the latest window
+    renderAll();
+    const tot = holdings.reduce((a,h)=>a+h.market,0);
+    setStatus("mfStatus","ok","Done ✓  Snapshot saved for "+date+(idx>=0?" (replaced earlier upload for the same date)":"")+"\n"+holdings.length+" funds · total market value ₹ "+fmt(tot)+(pdfSaved?"\nOriginal PDF archived — downloadable from the Dashboard.":"")+"\nSee the Dashboard for updated trends.");
+  }catch(err){
+    setStatus("mfStatus","err",err.message||String(err));
+  }finally{ mfGo.disabled=false; }
+});
+
+/* ================= Liquid asset flow ================= */
+let laSelected=null;
+const laDrop=document.getElementById("laDrop"), laFile=document.getElementById("laFile"), laGo=document.getElementById("laGo");
+laDrop.addEventListener("click",()=>laFile.click());
+laDrop.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" ")laFile.click();});
+["dragover","dragleave","drop"].forEach(ev=>laDrop.addEventListener(ev,e=>{e.preventDefault();laDrop.classList.toggle("over",ev==="dragover");if(ev==="drop"&&e.dataTransfer.files[0]){laFile.files=e.dataTransfer.files;laFileChosen();}}));
+laFile.addEventListener("change",laFileChosen);
+function laFileChosen(){ laSelected=laFile.files[0]||null; if(laSelected){laDrop.innerHTML="<strong>"+laSelected.name+"</strong><div style='font-size:12px;margin-top:4px'>Ready — click “Read document”</div>";laGo.disabled=false;} }
+
+laGo.addEventListener("click", async ()=>{
+  if(!laSelected) return;
+  laGo.disabled=true;
+  try{
+    setStatus("laStatus","info","Reading the document…");
+    const instruction = "This document describes a personal investment (fixed deposit receipt, RBI bond, NSC, PPF passbook, etc). Extract its details. Respond with ONLY compact JSON, no markdown: {\"type\":\"Fixed Deposit|RBI Bond|Recurring Deposit|PPF|NSC|Savings|Gold|Other\",\"institution\":\"bank/issuer + account or receipt no if visible\",\"principal\":0,\"rate\":0,\"start_date\":\"YYYY-MM-DD or empty\",\"maturity\":\"YYYY-MM-DD or empty\",\"maturity_value\":0}. start_date is the deposit/issue date. maturity_value = maturity amount if stated, else current balance, else the principal. Use 0 or empty string when unknown.";
+    let content;
+    if(laSelected.type==="application/pdf"){
+      const pass=document.getElementById("laPass").value;
+      const buf=await readFileAsArrayBuffer(laSelected);
+      const text=await extractPdfText(buf,pass);
+      content = instruction+"\n\n---\n"+text.slice(0,12000);
+    }else{
+      const b64=await readFileAsBase64(laSelected);
+      content = [{type:"image",source:{type:"base64",media_type:laSelected.type,data:b64}},{type:"text",text:instruction}];
+    }
+    const p = await askClaude(content);
+    document.getElementById("laType").value = ["Fixed Deposit","RBI Bond","Recurring Deposit","PPF","NSC","Savings","Gold"].includes(p.type)?p.type:"Other";
+    document.getElementById("laInst").value = p.institution||"";
+    document.getElementById("laPrincipal").value = p.principal||"";
+    document.getElementById("laRate").value = p.rate||"";
+    document.getElementById("laStart").value = /^\d{4}-\d{2}-\d{2}$/.test(p.start_date||"")?p.start_date:"";
+    document.getElementById("laMaturity").value = /^\d{4}-\d{2}-\d{2}$/.test(p.maturity||"")?p.maturity:"";
+    document.getElementById("laCurrent").value = p.maturity_value||p.current_value||p.principal||"";
+    setStatus("laStatus","ok","Details extracted ✓  Review them below, fix anything that's off, then click “Add to dashboard”.");
+  }catch(err){
+    setStatus("laStatus","err",err.message||String(err));
+  }finally{ laGo.disabled=false; }
+});
+
+document.getElementById("laSave").addEventListener("click", async ()=>{
+  const inst=document.getElementById("laInst").value.trim();
+  const principal=+document.getElementById("laPrincipal").value||0;
+  const current=+document.getElementById("laCurrent").value||principal;
+  if(!inst && !principal){ setStatus("laSaveStatus","err","Add at least an institution/description or an amount before saving."); return; }
+  liquid.push({id:Date.now().toString(36), type:document.getElementById("laType").value, inst:inst||"—",
+    principal, rate:+document.getElementById("laRate").value||null,
+    start:document.getElementById("laStart").value||"",
+    maturity:document.getElementById("laMaturity").value||"", current});
+  await saveLA(); renderAll();
+  ["laInst","laPrincipal","laRate","laStart","laMaturity","laCurrent"].forEach(id=>document.getElementById(id).value="");
+  setStatus("laSaveStatus","ok","Saved ✓  It now appears on the Dashboard.");
+});
+
+async function deleteLA(id){ liquid = liquid.filter(a=>a.id!==id); await saveLA(); renderAll(); }
+async function deleteSnap(date){
+  if(!confirm("Remove the "+date+" statement snapshot?"))return;
+  snapshots=snapshots.filter(s=>s.date!==date);
+  try{ await store.delete("portfolio-mf-pdf:"+date); }catch(e){}
+  await saveMF(); renderAll();
+}
+
+/* ================= snapshot downloads ================= */
+function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
+async function downloadPdf(date, btn){
+  const o = btn.textContent; btn.textContent = "…";
+  try{
+    const r = await store.get("portfolio-mf-pdf:"+date);
+    if(!r || !r.value) throw new Error("missing");
+    const bin = atob(r.value); const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    triggerDownload(new Blob([bytes],{type:"application/pdf"}), "CAS-statement-"+date+".pdf");
+  }catch(e){ alert("The original PDF for "+date+" isn't archived (it may predate this feature). Use the CSV download instead."); }
+  btn.textContent = o;
+}
+function downloadCsv(date){
+  const s = snapshots.find(x=>x.date===date); if(!s) return;
+  const esc = v => '"'+String(v).replace(/"/g,'""')+'"';
+  const rows = [["Statement date","Folio","ISIN","Scheme","Cost Value (INR)","Units","NAV (INR)","Market Value (INR)"]]
+    .concat(s.holdings.map(h=>[s.date,h.folio,h.isin,h.scheme,h.cost,h.units,h.nav,h.market]));
+  const csv = rows.map(r=>r.map(esc).join(",")).join("\n");
+  triggerDownload(new Blob([csv],{type:"text/csv"}), "portfolio-snapshot-"+date+".csv");
+}
+
+/* ================= rendering ================= */
+const PALETTE=["#0E5A45","#E8A13D","#3D6FB4","#BC3F32","#7A5EA8","#2E8B77","#B4763D","#5A7D9A","#8A5A13","#4C6E5D"];
+
+function renderAll(){
+  const latest = snapshots[snapshots.length-1];
+  const first  = snapshots[0];
+  const mfMarket = latest? latest.holdings.reduce((a,h)=>a+h.market,0):0;
+  const mfCost   = latest? latest.holdings.reduce((a,h)=>a+h.cost,0):0;
+  const laVal    = liquid.reduce((a,x)=>a+(x.current||0),0);
+  const laCost   = liquid.reduce((a,x)=>a+(x.principal||0),0);
+
+  document.getElementById("hdrTotal").textContent = "₹ "+fmt(mfMarket+laVal);
+  document.getElementById("hdrCost").textContent  = "₹ "+fmt(mfCost+laCost);
+  const gain=(mfMarket+laVal)-(mfCost+laCost);
+  const gEl=document.getElementById("hdrGain");
+  gEl.textContent=(gain>=0?"+₹ ":"−₹ ")+fmt(Math.abs(gain))+((mfCost+laCost)>0?"  ("+(gain/(mfCost+laCost)*100).toFixed(1)+"%)":"");
+  gEl.className="val "+(gain>=0?"up":"down");
+
+  /* MF summary: every fund ever seen, at its most recent value */
+  const funds = {}; // key -> {holding, date}
+  snapshots.forEach(s=>s.holdings.forEach(h=>{ funds[h.isin||h.scheme] = {h, date:s.date}; }));
+  const fundList = Object.values(funds);
+  const tb=document.querySelector("#mfTable tbody"); tb.innerHTML="";
+  document.getElementById("mfEmpty").style.display = fundList.length? "none":"block";
+  document.getElementById("mfTable").style.display = fundList.length? "table":"none";
+  document.getElementById("asOn").textContent = latest? "· latest statement "+latest.date : "";
+  fundList.forEach(({h,date})=>{
+    const g=h.market-h.cost;
+    tb.insertAdjacentHTML("beforeend",
+      `<tr><td><div class="scheme">${h.scheme}</div><div class="folio">${h.folio} · ${h.isin}</div></td>
+      <td class="num">${fmt2(h.units)}</td><td class="num">${fmt2(h.nav)}</td>
+      <td class="num">${fmt(h.cost)}</td><td class="num"><strong>${fmt(h.market)}</strong></td>
+      <td class="num"><span class="pill ${g>=0?'up':'down'}">${g>=0?'▲':'▼'} ${fmt(Math.abs(g))}</span></td>
+      <td style="font-family:var(--mono);font-size:12.5px">${date}</td></tr>`);
+  });
+
+  /* liquid assets summary */
+  const lb=document.querySelector("#laTable tbody"); lb.innerHTML="";
+  document.getElementById("laEmpty").style.display = liquid.length? "none":"block";
+  document.getElementById("laTable").style.display = liquid.length? "table":"none";
+  liquid.forEach(a=>{
+    lb.insertAdjacentHTML("beforeend",
+      `<tr><td><span class="pill type">${a.type}</span><div class="folio" style="margin-top:3px">${a.inst}</div></td>
+      <td class="num">${fmt(a.principal)}</td><td class="num"><strong>${fmt(a.current)}</strong></td>
+      <td style="font-family:var(--mono);font-size:12.5px">${a.start||"—"}</td>
+      <td style="font-family:var(--mono);font-size:12.5px">${a.maturity||"—"}</td>
+      <td class="num">${a.rate??"—"}</td>
+      <td class="rowactions"><button class="btn small danger" onclick="deleteLA('${a.id}')">Remove</button></td></tr>`);
+  });
+
+  /* snapshot download list — one-year retention window */
+  const sd=document.getElementById("snapDownloads"); sd.innerHTML="";
+  const recent = snapshots.filter(s=>withinYear(s.date));
+  document.getElementById("snapEmpty").style.display = recent.length? "none":"block";
+  recent.slice().reverse().forEach(s=>{
+    const tot=s.holdings.reduce((a,h)=>a+h.market,0);
+    sd.insertAdjacentHTML("beforeend",
+      `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)">
+        <div style="min-width:220px"><span style="font-family:var(--mono);font-weight:600">${s.date}</span>
+          <div class="folio">${s.holdings.length} funds · ₹ ${fmt(tot)}</div></div>
+        ${s.hasPdf?`<button class="btn small secondary" onclick="downloadPdf('${s.date}',this)">Statement PDF ↓</button>`:""}
+        <button class="btn small secondary" onclick="downloadCsv('${s.date}')">Data CSV ↓</button>
+        <button class="btn small danger" onclick="deleteSnap('${s.date}')">Delete</button>
+      </div>`);
+  });
+
+  drawCharts();
+}
+
+/* ================= growth chart with time slider ================= */
+let chartStart = null; // null = pinned to latest window
+
+function chartWindowSize(total){
+  const v = +document.getElementById("chartWindow").value;
+  return v===0 ? total : Math.min(v,total);
+}
+
+function drawFundsChart(){
+  if(charts.funds){ charts.funds.destroy(); charts.funds=null; }
+  const inr=v=>"₹"+Number(v).toLocaleString("en-IN",{maximumFractionDigits:0});
+  const dates=snapshots.map(s=>s.date);
+  const slider=document.getElementById("chartSlider"), lbl=document.getElementById("chartRangeLbl");
+  const win=chartWindowSize(dates.length||1);
+  const maxStart=Math.max(0,dates.length-win);
+  slider.max=maxStart; slider.disabled=maxStart===0;
+  if(chartStart===null||chartStart>maxStart) chartStart=maxStart;   // default: latest window
+  slider.value=chartStart;
+  const viewSnaps=snapshots.slice(chartStart,chartStart+win);
+  const viewDates=viewSnaps.map(s=>s.date);
+  lbl.textContent = dates.length? (viewDates[0]+" → "+viewDates[viewDates.length-1]+"  ("+dates.length+" uploads total)") : "";
+
+  const keys={}; snapshots.forEach(s=>s.holdings.forEach(h=>{const k=h.isin||h.scheme;if(!keys[k])keys[k]=h.scheme;}));
+  const ds=Object.entries(keys).map(([k,name],i)=>({label:name,
+    data:viewSnaps.map(s=>{const h=s.holdings.find(x=>(x.isin||x.scheme)===k);return h?h.market:null;}),
+    backgroundColor:PALETTE[i%PALETTE.length],borderRadius:3,maxBarThickness:42,
+    categoryPercentage:.82,barPercentage:.92}));
+  charts.funds=new Chart(document.getElementById("chartFunds"),{type:"bar",
+    data:{labels:viewDates,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:200},
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{position:"bottom",labels:{boxWidth:14,boxHeight:14,padding:14,font:{size:12}}},
+        tooltip:{callbacks:{
+          title:c=>"Statement of "+c[0].label,
+          label:c=>" "+c.dataset.label+": "+inr(c.parsed.y)}}},
+      scales:{y:{beginAtZero:true,ticks:{callback:inr,font:{family:"'Spline Sans Mono'",size:12}},grid:{color:"#E7EDE7"}},
+              x:{grid:{display:false},ticks:{font:{family:"'Spline Sans Mono'",size:12,weight:"600"}}}}}});
+}
+document.getElementById("chartSlider").addEventListener("input",e=>{ chartStart=+e.target.value; drawFundsChart(); });
+document.getElementById("chartWindow").addEventListener("change",()=>{ chartStart=null; drawFundsChart(); });
+
+function drawCharts(){
+  if(charts.alloc){ charts.alloc.destroy(); charts.alloc=null; }
+  const inr=v=>"₹"+Number(v).toLocaleString("en-IN",{maximumFractionDigits:0});
+
+  /* (b) grouped bar chart with slider */
+  drawFundsChart();
+
+  /* allocation: each MF scheme + each liquid asset type */
+  const latest=snapshots[snapshots.length-1];
+  const slices=[],vals=[];
+  if(latest) latest.holdings.forEach(h=>{slices.push(h.scheme);vals.push(h.market);});
+  const byType={}; liquid.forEach(a=>byType[a.type]=(byType[a.type]||0)+(a.current||0));
+  Object.entries(byType).forEach(([t,v])=>{slices.push(t);vals.push(v);});
+  charts.alloc=new Chart(document.getElementById("chartAlloc"),{type:"doughnut",
+    data:{labels:slices,datasets:[{data:vals,backgroundColor:slices.map((_,i)=>PALETTE[i%PALETTE.length]),borderColor:"#fff",borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:"55%",
+      plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:11}}},
+      tooltip:{callbacks:{label:c=>c.label+": "+inr(c.parsed)}}}}});
+}
+
+/* ================= settings: API key & backup ================= */
+function refreshKeyStatus(){
+  const k=getApiKey();
+  if(k) setStatus("keyStatus","ok","A key is saved on this device ("+k.slice(0,10)+"…"+k.slice(-4)+"). Document reading is enabled.");
+  else setStatus("keyStatus","info","No key saved yet — statement and document reading will ask for one. Everything else works without it.");
+}
+document.getElementById("saveKey").addEventListener("click",()=>{
+  const k=document.getElementById("apiKey").value.trim();
+  if(!k){ setStatus("keyStatus","err","Paste a key first."); return; }
+  if(!k.startsWith("sk-ant-")) setStatus("keyStatus","err","That doesn't look like an Anthropic key (they start with sk-ant-). Saved anyway — remove it if it was a mistake.");
+  localStorage.setItem(API_KEY_STORE,k);
+  document.getElementById("apiKey").value="";
+  refreshKeyStatus();
+});
+document.getElementById("clearKey").addEventListener("click",()=>{
+  localStorage.removeItem(API_KEY_STORE); refreshKeyStatus();
+});
+
+document.getElementById("exportData").addEventListener("click",()=>{
+  const data={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k===KEY_MF||k===KEY_LA||k.startsWith("portfolio-mf-pdf:")) data[k]=localStorage.getItem(k);
+  }
+  const payload=JSON.stringify({app:"portfolio-manager",version:1,exported:new Date().toISOString(),data});
+  triggerDownload(new Blob([payload],{type:"application/json"}),"portfolio-backup-"+new Date().toISOString().slice(0,10)+".json");
+  setStatus("backupStatus","ok","Backup downloaded. Keep it somewhere safe (it contains your statement data).");
+});
+document.getElementById("importDataBtn").addEventListener("click",()=>document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const obj=JSON.parse(await f.text());
+    if(obj.app!=="portfolio-manager"||!obj.data) throw new Error("This doesn't look like a backup exported from this app.");
+    Object.entries(obj.data).forEach(([k,v])=>{
+      if(k===KEY_MF||k===KEY_LA||k.startsWith("portfolio-mf-pdf:")) localStorage.setItem(k,v);
+    });
+    await loadState();
+    setStatus("backupStatus","ok","Backup restored ✓  Check the Dashboard.");
+  }catch(err){ setStatus("backupStatus","err",err.message||String(err)); }
+  e.target.value="";
+});
+
+refreshKeyStatus();
+loadState();
+</script>
+</body>
+</html>
